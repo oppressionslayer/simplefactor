@@ -44,7 +44,7 @@ def factorise(N):
         current_N = to_factor.pop()  # Get the last number to factor
         
         # Check if the number is prime or 1 before trying to factorize it further
-        if current_N == 1 or np.all(np.array([current_N]) % np.arange(2, int(math.sqrt(current_N)) + 1) != 0):
+        if current_N == 1 or np.all(np.array([current_N]) % np.arange(2, int(isqrt.sqrt(current_N)) + 1) != 0):
             if current_N != 1:
                 factors.append(current_N)
             continue
