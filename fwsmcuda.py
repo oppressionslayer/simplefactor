@@ -37,17 +37,36 @@ def factorise_cuda(N, Nsqrt, result):
             result[0] = a  
 
 def factorise(N):
+    factors = []  # List to store all factors
+    to_factor = [N]  # List of numbers to be factored
+    
+    while to_factor:
+        current_N = to_factor.pop()  # Get the last number to factor
+        
+        # Check if the number is prime or 1 before trying to factorize it further
+        if current_N == 1 or np.all(np.array([current_N]) % np.arange(2, int(math.sqrt(current_N)) + 1) != 0):
+            if current_N != 1:
+                factors.append(current_N)
+            continue
 
-  result = cuda.device_array(1, dtype=np.uint64)  # Using uint64 for larger numbers
-  Nsqrt = isqrt(N)
-  threadsperblock = 256
-  # Not sure what block size to us but it's adjustable
-  blockspergrid = min(65535, (Nsqrt + (threadsperblock - 1)) // threadsperblock)
+        result = cuda.device_array(1, dtype=np.int64)
+        Nsqrt = isqrt(current_N)
+        threadsperblock = 256
+        blockspergrid = min(65535, (Nsqrt + (threadsperblock - 1)) // threadsperblock)
 
-  factorise_cuda[blockspergrid, threadsperblock](N, Nsqrt, result)
+        factorise_cuda[blockspergrid, threadsperblock](current_N, Nsqrt, result)
+        cuda.synchronize()  # Ensure the kernel has finished
+        factor = result.copy_to_host()[0]
 
-  result_cpu = result.copy_to_host()
-  return result_cpu
+        if factor and factor != current_N:
+            factors.append(factor)  # Add the found factor to the list
+            to_factor.append(factor)  # Add the factor for potential further factoring
+            to_factor.append(current_N // factor)  # Add the quotient for potential further factoring
+        else:
+            # In case the CUDA method fails to find a factor (should not happen with proper implementation), add the number as is.
+            factors.append(current_N)
+
+    return np.unique(factors)  # Return the unique factors as a numpy array
 
 # In [9]: factorise(100973253376521343)
 # Out[9]: array([247711], dtype=uint64)
