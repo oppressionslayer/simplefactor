@@ -24,6 +24,7 @@ Out[16]: mpz(11344301)
 # CUDA TIMING PERFORMANCE
 
 If you are just interested in CUDA Factoring Performance, check out this test code
+We can factor not in just 500 ms but in 279 usec!
 
 ```
 import timeit
@@ -48,43 +49,41 @@ def isqrt(n):
         raise ValueError("square root not defined for negative numbers")
 
 def factorise(N):
-    factors = []  # List to store all factors
-    to_factor = [N]  # List of numbers to be factored
-    
+    factors = []
+    to_factor = [N]
+
     while to_factor:
-        current_N = to_factor.pop()  # Get the last number to factor
-        
-        # Check if the number is prime or 1 before trying to factorize it further
+        current_N = to_factor.pop()
+
         if current_N == 1 or np.all(np.array([current_N]) % np.arange(2, int(isqrt(current_N)) + 1) != 0):
             if current_N != 1:
                 factors.append(current_N)
             continue
 
-        result = cuda.device_array(1, dtype=np.int64)
+        result = cuda.device_array(1, dtype=np.uint64)
         Nsqrt = isqrt(current_N)
         threadsperblock = 256
-        blockspergrid = min(65535, (Nsqrt + (threadsperblock - 1)) // threadsperblock)
+        blockspergrid = (Nsqrt + (threadsperblock - 1)) // threadsperblock
 
         factorise_cuda[blockspergrid, threadsperblock](current_N, Nsqrt, result)
-        cuda.synchronize()  # Ensure the kernel has finished
-        factor = result.copy_to_host()[0]
+        cuda.synchronize()
+        factor = int(result.copy_to_host()[0])  # Explicit casting to int
 
         if factor and factor != current_N:
-            factors.append(factor)  
-            to_factor.append(factor)  
-            to_factor.append(current_N // factor)  
+            factors.extend([factor, current_N // factor])
         else:
-
             factors.append(current_N)
 
-    return np.unique(factors)  # Return the unique factors as a numpy array
+    return np.array(np.unique(factors), dtype=np.int64)  # Ensure output is integer type
+
+
 
 # Preparation for execution
-N = 100973253376521343
+N = 1009732533765211
 result = cuda.device_array(1, dtype=np.int64)
 Nsqrt = isqrt(N)
-threadsperblock = 256
-blockspergrid = min(65535, (Nsqrt + (threadsperblock - 1)) // threadsperblock)
+threadsperblock = 8
+blockspergrid = min(64**2-1, (Nsqrt + (threadsperblock - 1)) // threadsperblock)
 """
 
 test_code = """
@@ -94,9 +93,9 @@ result_cpu = result.copy_to_host()
 """
 
 # Measure execution time
-execution_time = timeit.timeit(stmt=test_code, setup=setup_code, number=100, globals=globals()) / 100
-print(f"Average execution time: {execution_time} seconds")
+execution_time_us = timeit.timeit(stmt=test_code, setup=setup_code, number=100, globals=globals()) / 100 * 1_000_000  # Convert to microseconds
+print(f"Average execution time: {execution_time_us} μs")
 
-# Average execution time: 0.01580274557100006 seconds
+# Average execution time: 279.54018999935215 μs
 
 ```
