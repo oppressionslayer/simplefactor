@@ -80,7 +80,7 @@ def factorise(N):
     return np.unique(factors)  # Return the unique factors as a numpy array
 
 # Preparation for execution
-N = 1009732533765211
+N = 100973253376521343
 result = cuda.device_array(1, dtype=np.int64)
 Nsqrt = isqrt(N)
 threadsperblock = 256
