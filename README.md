@@ -4,7 +4,8 @@ There are two versoins use either numba or gmpy2.
 The numba version is currently limited to int64 numbers
 
 Added a Cuda version which can factor an int64 number in
-about 10 ms on a laptop 3070 Nivida with numba cuda
+about 15 ms on a laptop 3070 Nivida with numba cuda. This
+is currently optimized for odd factor factorization
 
 
 ```
@@ -46,19 +47,37 @@ def isqrt(n):
     else:
         raise ValueError("square root not defined for negative numbers")
 
-@cuda.jit
-def factorise_cuda(N, Nsqrt, result):
-    x = cuda.grid(1)
-    if x < Nsqrt:
-        root = Nsqrt + x
-        Nmodcongruence = abs(root**2 - N)
-        Nsqrt_mod = int(math.sqrt(Nmodcongruence))  # Simplified for example
-        a = root - Nsqrt_mod
-        b = N
-        while b:
-            a, b = b, a % b
-        if a != 1 and a != N:  # Check if a is a non-trivial factor
-            result[0] = a  # Assuming you want to store the factor found
+def factorise(N):
+    factors = []  # List to store all factors
+    to_factor = [N]  # List of numbers to be factored
+    
+    while to_factor:
+        current_N = to_factor.pop()  # Get the last number to factor
+        
+        # Check if the number is prime or 1 before trying to factorize it further
+        if current_N == 1 or np.all(np.array([current_N]) % np.arange(2, int(math.sqrt(current_N)) + 1) != 0):
+            if current_N != 1:
+                factors.append(current_N)
+            continue
+
+        result = cuda.device_array(1, dtype=np.int64)
+        Nsqrt = isqrt(current_N)
+        threadsperblock = 256
+        blockspergrid = min(65535, (Nsqrt + (threadsperblock - 1)) // threadsperblock)
+
+        factorise_cuda[blockspergrid, threadsperblock](current_N, Nsqrt, result)
+        cuda.synchronize()  # Ensure the kernel has finished
+        factor = result.copy_to_host()[0]
+
+        if factor and factor != current_N:
+            factors.append(factor)  
+            to_factor.append(factor)  
+            to_factor.append(current_N // factor)  
+        else:
+
+            factors.append(current_N)
+
+    return np.unique(factors)  # Return the unique factors as a numpy array
 
 # Preparation for execution
 N = 1009732533765211
@@ -75,8 +94,9 @@ result_cpu = result.copy_to_host()
 """
 
 # Measure execution time
-execution_time = timeit.timeit(stmt=test_code, setup=setup_code, number=10, globals=globals()) / 10
+execution_time = timeit.timeit(stmt=test_code, setup=setup_code, number=100, globals=globals()) / 100
 print(f"Average execution time: {execution_time} seconds")
 
-#Average execution time: 0.010021003099973313 seconds
+# Average execution time: 0.01580274557100006 seconds
+
 ```
